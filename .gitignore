@@ -20,6 +20,12 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Auth session (contains live tokens — never commit)
+auth-state.json
+
+# Claude Code internal directory
+.claude/
+
 # Logs
 *.log
 npm-debug.log*

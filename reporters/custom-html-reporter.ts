@@ -41,6 +41,7 @@ interface TestRecord {
   retry:       number;
   startTime:   number;          // Unix ms
   annotations: Array<{ type: string; description?: string }>;
+  failureClass: string;
 }
 
 // ─── Reporter class ───────────────────────────────────────────────────────────
@@ -75,24 +76,28 @@ class CustomHtmlReporter implements Reporter {
     const esc = (s = '') =>
       s.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
 
+    const isFail       = result.status === 'failed' || result.status === 'timedOut';
+    const failureClass = isFail ? this.classifyFailure(result.error?.message || '', title) : '';
+
     this.records.push({
-      idx:        ++this.idx,
-      id:         test.id,
+      idx:         ++this.idx,
+      id:          test.id,
       testId,
       title,
       suite,
       module,
       file,
-      status:     result.status,
-      duration:   result.duration,
-      error:      esc(result.error?.message ?? ''),
-      errorStack: esc(result.error?.stack    ?? ''),
+      status:      result.status,
+      duration:    result.duration,
+      error:       esc(result.error?.message ?? ''),
+      errorStack:  esc(result.error?.stack    ?? ''),
       screenshot,
       videoPath,
       tracePath,
-      retry:      result.retry,
-      startTime:  result.startTime.getTime(),
+      retry:       result.retry,
+      startTime:   result.startTime.getTime(),
       annotations: test.annotations,
+      failureClass,
     });
   }
 
@@ -126,6 +131,29 @@ class CustomHtmlReporter implements Reporter {
 
   printsToStdio(): boolean { return false; }
 
+  // ─── Failure classifier ───────────────────────────────────────────────────
+
+  private classifyFailure(errorMsg: string, title: string): string {
+    const e = (errorMsg || '').toLowerCase();
+    const t = title.toLowerCase();
+    if (e.includes('tearing down') || e.includes('context was closed')) return 'Automation Issue';
+    if (e.includes('waitforurl') || e.includes('page.waitforurl'))       return 'Automation Issue';
+    if (e.includes('locator.click') && e.includes('timeout'))            return 'Automation Issue';
+    if (t.includes('signup') || t.includes('new user') ||
+        (t.includes('otp') && !t.includes('profile')))                   return 'External Dependency Issue';
+    if (e.includes('test timeout') && (t.includes('signup') || t.includes('mailinator')))
+                                                                          return 'External Dependency Issue';
+    if (e.includes('profile not found') ||
+        (e.includes('tobevisible') && (t.includes('dashboard') || t.includes('sidebar') || t.includes('tag library'))))
+                                                                          return 'Environment Issue';
+    if (e.includes('tohaveurl') && (t.includes('login') || t.includes('auth')))
+                                                                          return 'Environment Issue';
+    if (e.includes('tobelessthan') || (e.includes('received') && e.includes('15000')))
+                                                                          return 'Performance/SLA Issue';
+    if (e.includes('test timeout'))                                       return 'Automation Issue';
+    return 'Product Bug';
+  }
+
   // ─── HTML builder ─────────────────────────────────────────────────────────
 
   private buildHTML(overallStatus: string): string {
@@ -136,6 +164,13 @@ class CustomHtmlReporter implements Reporter {
     const total   = R.length;
     const rate    = total > 0 ? ((passed / total) * 100).toFixed(1) : '0.0';
     const elapsed = Date.now() - this.beginTime;
+
+    const productBugs = R.filter(r => r.failureClass === 'Product Bug').length;
+    const autoIssues  = R.filter(r => r.failureClass === 'Automation Issue').length;
+    const envIssues   = R.filter(r => r.failureClass === 'Environment Issue').length;
+    const extIssues   = R.filter(r => r.failureClass === 'External Dependency Issue').length;
+    const critHigh    = R.filter(r => r.failureClass === 'Product Bug' && (r.annotations.find(a => a.type === 'priority')?.description || 'High').match(/critical|high/i)).length;
+    const releaseReady = productBugs === 0 || critHigh === 0;
 
     // Module breakdown
     const modMap: Record<string, { p:number; f:number; s:number }> = {};
@@ -166,7 +201,7 @@ class CustomHtmlReporter implements Reporter {
       records: R.map(r => ({ ...r, screenshot: r.screenshot ? '__HAS_IMG__' : null })),
       screenshots: Object.fromEntries(R.filter(r => r.screenshot).map(r => [r.idx, r.screenshot])),
       modMap,
-      stats: { passed, failed, skipped, total, rate, elapsed },
+      stats: { passed, failed, skipped, total, rate, elapsed, productBugs, autoIssues, envIssues, extIssues, releaseReady },
       meta:  { env, runDate, overallStatus },
     });
 
@@ -904,7 +939,11 @@ function drillModule(mod) { S.modFilter = mod; navigate('results'); }
 // ── Render: Bugs ──────────────────────────────────────────────────────────
 function renderBugs() {
   const failures = RECORDS.filter(r => statusClass(r.status) === 'fail');
-  document.getElementById('bugs-count').textContent = failures.length + ' bug' + (failures.length!==1?'s':'') + ' found';
+  const productBugsInView = failures.filter(r => r.failureClass === 'Product Bug').length;
+  document.getElementById('bugs-count').textContent =
+    failures.length + ' failure' + (failures.length!==1?'s':'') + ' — ' +
+    productBugsInView + ' product bug' + (productBugsInView!==1?'s':'') + ', ' +
+    (failures.length - productBugsInView) + ' infra issues';
   if (!failures.length) {
     document.getElementById('bugs-grid').innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-muted)"><div style="font-size:48px;margin-bottom:12px">🎉</div><div style="font-size:16px;font-weight:700">No failures! All tests passed.</div></div>';
     return;
@@ -923,7 +962,7 @@ function renderBugs() {
         '<span class="bug-key">' + jKey + '</span>' +
         '<div class="bug-badges">' +
           '<span class="priority-pill ' + pClass + '">' + esc(priority) + '</span>' +
-          '<span class="type-pill">Bug</span>' +
+          '<span class="type-pill" style="background:' + (r.failureClass==='Product Bug'?'var(--fail-bg)':'var(--accent-bg)') + ';color:' + (r.failureClass==='Product Bug'?'var(--fail-text)':'var(--accent-text)') + '">' + esc(r.failureClass || 'Bug') + '</span>' +
         '</div>' +
       '</div>' +
       '<div class="bug-summary">' + esc(r.title) + '</div>' +
@@ -1227,6 +1266,47 @@ if (savedTheme) { document.documentElement.dataset.theme = savedTheme; }
           <div class="kpi-value">${this.ms(elapsed)}</div>
           <div class="kpi-sub">${Object.keys(modMap).length} modules · 6 browsers</div>
         </div>
+        <div class="kpi fail" style="--kpi-color:#DE350B">
+          <div class="kpi-icon">🐛</div>
+          <div class="kpi-label">Product Bugs</div>
+          <div class="kpi-value" style="color:#DE350B">${productBugs}</div>
+          <div class="kpi-sub">Need JIRA tickets</div>
+        </div>
+        <div class="kpi skip" style="--kpi-color:#6366F1">
+          <div class="kpi-icon">⚙️</div>
+          <div class="kpi-label">Automation Issues</div>
+          <div class="kpi-value" style="color:#6366F1;font-size:28px">${autoIssues}</div>
+          <div class="kpi-sub">Test infra · no ticket needed</div>
+        </div>
+        <div class="kpi rate">
+          <div class="kpi-icon">${releaseReady ? '✅' : '🚫'}</div>
+          <div class="kpi-label">Release Status</div>
+          <div class="kpi-value" style="font-size:14px;margin-top:10px;padding:6px 10px;border-radius:6px;background:${releaseReady ? '#D1FAE5' : '#FEE2E2'};color:${releaseReady ? '#065F46' : '#991B1B'}">${releaseReady ? 'READY' : 'NOT READY'}</div>
+          <div class="kpi-sub">${productBugs === 0 ? 'No product bugs' : critHigh + ' critical/high bug' + (critHigh !== 1 ? 's' : '')}</div>
+        </div>
+      </div>
+
+      <!-- Failure classification bar -->
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-title">📊 Failure Classification Breakdown</div>
+        <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-end">
+          ${[
+            ['🐛 Product Bug', productBugs, '#DE350B', '#FEE2E2'],
+            ['⚙️ Automation', autoIssues, '#6366F1', '#EEF2FF'],
+            ['🔑 Environment', envIssues, '#F59E0B', '#FEF3C7'],
+            ['📧 External Dep', extIssues, '#10B981', '#D1FAE5'],
+          ].map(([label, count, color, bg]) => `
+            <div style="text-align:center;min-width:100px">
+              <div style="font-size:28px;font-weight:900;color:${color}">${count}</div>
+              <div style="font-size:12px;font-weight:600;color:#64748B;margin-top:2px">${label}</div>
+              <div style="height:6px;border-radius:3px;margin-top:6px;background:${count > 0 ? color : '#E2E8F0'};opacity:${count > 0 ? 1 : 0.3}"></div>
+            </div>`).join('')}
+          <div style="margin-left:auto;padding:10px 16px;border-radius:8px;background:${releaseReady ? '#D1FAE5' : '#FEE2E2'};border:2px solid ${releaseReady ? '#10B981' : '#EF4444'}">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:${releaseReady ? '#065F46' : '#991B1B'}">Release Status</div>
+            <div style="font-size:20px;font-weight:900;color:${releaseReady ? '#065F46' : '#991B1B'};margin-top:2px">${releaseReady ? (productBugs === 0 ? '✓ READY' : '⚠ CONDITIONAL') : '✗ NOT READY'}</div>
+            <div style="font-size:11px;color:${releaseReady ? '#065F46' : '#991B1B'};margin-top:2px">${productBugs === 0 ? 'No product bugs found' : productBugs + ' product bug' + (productBugs !== 1 ? 's' : '') + ' present'}</div>
+          </div>
+        </div>
       </div>
 
       <!-- Charts row -->
@@ -1250,6 +1330,51 @@ if (savedTheme) { document.documentElement.dataset.theme = savedTheme; }
           </div>
         </div>
       </div>
+
+      <!-- Top Failure Reasons -->
+      ${failed > 0 ? `<div class="card" style="margin-bottom:20px">
+        <div class="card-title">🏆 Top Failure Reasons</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          ${(() => {
+            const reasonMap = new Map<string, { count: number; cls: string }>();
+            for (const r of R.filter(x => x.status === 'failed' || x.status === 'timedOut')) {
+              const e = (r.error || '').toLowerCase();
+              const t = r.title.toLowerCase();
+              const reason =
+                e.includes('tearing down') ? 'SPA WebSocket teardown (>120s cleanup)' :
+                e.includes('waitforurl') ? 'waitForURL timeout on SPA navigation' :
+                e.includes('locator.click') && e.includes('timeout') ? 'Element click timeout (selector mismatch)' :
+                e.includes('tobevisible') && e.includes('timeout') ? 'Element not visible (auth/session)' :
+                e.includes('tobetruthy') ? 'Assertion failed — feature not working' :
+                e.includes('tohaveurl') ? 'URL mismatch after navigation' :
+                r.failureClass === 'External Dependency Issue' ? 'Mailinator OTP delay/timeout' :
+                e.includes('test timeout') ? 'Overall test timeout exceeded' :
+                r.failureClass + ' — other';
+              const prev = reasonMap.get(reason);
+              if (prev) { prev.count++; } else { reasonMap.set(reason, { count: 1, cls: r.failureClass }); }
+            }
+            const sorted = [...reasonMap.entries()].sort((a, b) => b[1].count - a[1].count).slice(0, 5);
+            const maxCount = sorted[0]?.[1]?.count || 1;
+            const clsColor: Record<string, string> = {
+              'Product Bug': '#EF4444', 'Automation Issue': '#6366F1',
+              'Environment Issue': '#F59E0B', 'External Dependency Issue': '#10B981',
+              'Performance/SLA Issue': '#8B5CF6',
+            };
+            return sorted.map(([reason, { count, cls }], i) => {
+              const pct = Math.round((count / maxCount) * 100);
+              const color = clsColor[cls] || '#94A3B8';
+              return '<div style="display:flex;align-items:center;gap:10px;font-size:12px">' +
+                '<span style="font-size:11px;font-weight:800;color:var(--text-faint);min-width:20px">#' + (i + 1) + '</span>' +
+                '<span style="min-width:280px;color:var(--text)">' + reason + '</span>' +
+                '<div style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden">' +
+                  '<div style="width:' + pct + '%;height:100%;background:' + color + ';border-radius:4px"></div>' +
+                '</div>' +
+                '<span style="font-weight:700;color:var(--text-muted);min-width:28px;text-align:right">' + count + '\xD7</span>' +
+              '</div>';
+            }).join('');
+          })()}
+        </div>
+      </div>` : ''}
 
       <!-- Two columns: Recent failures + Environment -->
       <div class="row-2">

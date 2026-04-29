@@ -39,9 +39,15 @@ export class DashboardPage {
   }
 
   async logout(): Promise<void> {
-    await this.page.click('[class*="user-card"], [class*="avatar"], [class*="profile"]');
-    await this.page.click('text=Log Out, text=Logout, text=Sign Out');
-    await this.page.waitForURL(/\/login/, { timeout: 10000 });
+    // Open the user menu in the sidebar (avoid broad "profile" which matches error pages)
+    await this.page.locator(
+      '[class*="user-card"], [class*="user-avatar"], [class*="UserAvatar"], [class*="user-info"], [class*="user-menu"], [class*="bottom-user"], [data-testid*="user"]'
+    ).first().click({ timeout: 15000 });
+    await this.page.click(
+      'button:has-text("Log Out"), button:has-text("Logout"), button:has-text("Sign Out"), li:has-text("Log Out"), li:has-text("Logout")',
+      { timeout: 10000 }
+    );
+    await this.page.waitForURL(/\/login/, { waitUntil: 'domcontentloaded', timeout: 15000 });
   }
 
   async assertTagLibraryVisible(): Promise<void> {
