@@ -1,4 +1,4 @@
-import { Page, Locator, BrowserContext, expect } from '@playwright/test';
+import { Page, Locator, BrowserContext } from '@playwright/test';
 
 /**
  * Page object for /auth (unified passwordless login + signup screen).
@@ -64,12 +64,54 @@ export class AuthPage {
   }
 
   async enterOtp(code: string) {
+    // .fill('') first: a prior wrong attempt leaves the field populated, and
+    // this single maxlength=6 input doesn't auto-clear on refocus - typing
+    // into it a second time without clearing would overflow past the limit.
     await this.otpInput.click();
+    await this.otpInput.fill('');
     await this.page.keyboard.type(code);
   }
 
   async submitOtp() {
     await this.verifyButton.click();
+  }
+
+  /**
+   * A brand-new email/phone that has never signed up before lands on a
+   * "Complete your workspace" registration form immediately after OTP
+   * verification succeeds (still under the /auth path) - the app only
+   * reaches the dashboard once this is filled in. Existing accounts skip
+   * straight past this. Call after submitOtp(); no-ops if the form never
+   * appears within `timeout`.
+   */
+  async completeRegistrationIfShown(timeout = 15_000): Promise<boolean> {
+    // NOTE: Locator.isVisible({ timeout }) does NOT poll/retry the way
+    // expect(locator).toBeVisible() does - it's a single immediate check
+    // that merely respects actionability timeouts for the query itself,
+    // so it can return false if called the instant after submitOtp() while
+    // the client is still transitioning off the OTP screen. waitFor()
+    // actually polls until the deadline, which is what's needed here.
+    const heading = this.page.getByRole('heading', { name: 'Complete your workspace' });
+    const shown = await heading
+      .waitFor({ state: 'visible', timeout })
+      .then(() => true)
+      .catch(() => false);
+    if (!shown) return false;
+
+    await this.page.getByPlaceholder('Enter your first name').fill('QA');
+    await this.page.getByPlaceholder('Enter your last name').fill('Automation');
+    // Phone Number is also required on this form, even for an email signup.
+    // Must be unique per registration - a hardcoded number here causes a
+    // real 409 from POST /api/auth/register once it's been used before,
+    // even for a brand-new email (confirmed live).
+    const phone = `9${Math.floor(100000000 + Math.random() * 899999999)}`.slice(0, 10);
+    await this.page.getByPlaceholder('Enter the phone number').fill(phone);
+    const terms = this.page.locator('input[type="checkbox"]').first();
+    if (!(await terms.isChecked().catch(() => false))) {
+      await terms.check({ force: true });
+    }
+    await this.page.getByRole('button', { name: 'Complete Registration' }).click();
+    return true;
   }
 
   /** Reads the header text ("Sign in to Synctag" / "Create your Synctag account"). */

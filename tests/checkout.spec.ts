@@ -34,6 +34,10 @@ const test = base.extend<{ authedPage: import('@playwright/test').Page }>({
 });
 
 test.beforeAll(async ({ browser }) => {
+  // Mailinator inbox delivery/polling is real and can occasionally take
+  // well over the default 45s test timeout - this hook does a real OTP
+  // round-trip end to end, so it needs real headroom.
+  test.setTimeout(120_000);
   const context = await browser.newContext();
   const page = await context.newPage();
   const auth = new AuthPage(page);
@@ -43,6 +47,9 @@ test.beforeAll(async ({ browser }) => {
   const otp = await auth.getRealOtpFromMailinator(context, email);
   await auth.enterOtp(otp);
   await auth.submitOtp();
+  // A never-before-used address always signs up fresh and must clear the
+  // one-time "Complete your workspace" step before reaching the dashboard.
+  await auth.completeRegistrationIfShown();
   await expect(page).not.toHaveURL(/\/auth/, { timeout: 20_000 });
   await context.storageState({ path: CHECKOUT_AUTH_FILE });
   await context.close();
