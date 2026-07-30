@@ -42,7 +42,7 @@ test.describe('Pricing page - price/cadence consistency', () => {
     // session - see checkout.spec.ts and README.md "Known gaps").
     const pricing = new PricingPage(page);
     await pricing.goto();
-    const cadence = await pricing.priceCadence('PRO - 7 DAYS');
+    const cadence = await pricing.priceCadence('Pro - 7 days');
     expect(cadence).toMatch(/day/i);
     expect(cadence).not.toMatch(/month/i);
   });
@@ -59,7 +59,7 @@ test.describe('Pricing page - business-logic guard rails', () => {
     const pricing = new PricingPage(page);
     await pricing.goto();
 
-    const customFreeFeatures = (await pricing.features('CUSTOM FREE')).map((f) => f.trim());
+    const customFreeFeatures = (await pricing.features('Custom Free')).map((f) => f.trim());
     const enterpriseOnlyFeatures = [
       'Admin Dashboard',
       'SSO Integration',
@@ -82,7 +82,7 @@ test.describe('Pricing page - business-logic guard rails', () => {
   test('every plan\'s "Choose" button requires authentication before completing selection [positive]', async ({ page }) => {
     const pricing = new PricingPage(page);
     await pricing.goto();
-    await pricing.chooseButton('PRO').click();
+    await pricing.chooseButton('Pro').click();
     await expect(page).toHaveURL(/\/auth|\/profile/);
   });
 });

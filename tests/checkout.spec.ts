@@ -53,7 +53,7 @@ test.describe('Checkout - successful payment scenarios', () => {
     const checkout = new CheckoutPage(page);
     await checkout.goto();
     await checkout.openUpgradeModal();
-    await checkout.choosePlanInModal('PRO - 7 DAYS').click();
+    await checkout.choosePlanInModal('Pro - 7 days').click();
     await checkout.confirmAndPay();
     await checkout.assertTestModeBannerVisible();
     await checkout.payWithNewCard(RAZORPAY_TEST_CARDS.success);
@@ -64,7 +64,7 @@ test.describe('Checkout - successful payment scenarios', () => {
     const checkout = new CheckoutPage(page);
     await checkout.goto();
     await checkout.openUpgradeModal();
-    await checkout.choosePlanInModal('PRO').click();
+    await checkout.choosePlanInModal('Pro').click();
     await checkout.confirmAndPay();
     await checkout.assertTestModeBannerVisible();
     await checkout.payWithNewCard(RAZORPAY_TEST_CARDS.successMastercard);
@@ -77,7 +77,7 @@ test.describe('Checkout - declined payment scenarios', () => {
     const checkout = new CheckoutPage(page);
     await checkout.goto();
     await checkout.openUpgradeModal();
-    await checkout.choosePlanInModal('PRO - 7 DAYS').click();
+    await checkout.choosePlanInModal('Pro - 7 days').click();
     await checkout.confirmAndPay();
     await checkout.assertTestModeBannerVisible();
     await checkout.payWithNewCard(RAZORPAY_TEST_CARDS.failureDecline);
@@ -89,7 +89,7 @@ test.describe('Checkout - declined payment scenarios', () => {
     const checkout = new CheckoutPage(page);
     await checkout.goto();
     await checkout.openUpgradeModal();
-    await checkout.choosePlanInModal('PRO - 7 DAYS').click();
+    await checkout.choosePlanInModal('Pro - 7 days').click();
     await checkout.confirmAndPay();
     await checkout.assertTestModeBannerVisible();
     await checkout.payWithNewCard(RAZORPAY_TEST_CARDS.failureInsufficientFunds);
@@ -100,7 +100,7 @@ test.describe('Checkout - declined payment scenarios', () => {
     const checkout = new CheckoutPage(page);
     await checkout.goto();
     await checkout.openUpgradeModal();
-    await checkout.choosePlanInModal('PRO').click();
+    await checkout.choosePlanInModal('Pro').click();
     await checkout.confirmAndPay();
     await checkout.assertTestModeBannerVisible();
     await checkout.payWithNewCard(RAZORPAY_TEST_CARDS.failureDecline);
@@ -117,7 +117,7 @@ test.describe('Checkout - invalid card input (client-side validation)', () => {
       const checkout = new CheckoutPage(page);
       await checkout.goto();
       await checkout.openUpgradeModal();
-      await checkout.choosePlanInModal('PRO - 7 DAYS').click();
+      await checkout.choosePlanInModal('Pro - 7 days').click();
       await checkout.confirmAndPay();
       await checkout.assertTestModeBannerVisible();
 
@@ -144,7 +144,7 @@ test.describe('Checkout - plan pricing/billing consistency (BUG-02 regression)',
     const checkout = new CheckoutPage(page);
     await checkout.goto();
     await checkout.openUpgradeModal();
-    await checkout.choosePlanInModal('PRO - 7 DAYS').click();
+    await checkout.choosePlanInModal('Pro - 7 days').click();
 
     const planPriceInModal = page.locator('text=/₹100/');
     await expect(planPriceInModal).toBeVisible();

@@ -58,15 +58,19 @@ export const INVALID_CARDS = {
   nonNumeric: { number: 'abcd efgh ijkl mnop', expiry: '12/30', cvv: '123' },
 };
 
-/** Plan names exactly as rendered on the public /pricing page (case-sensitive). */
+/**
+ * Plan names exactly as rendered on the public /pricing page (case-sensitive
+ * — the app renders title case, e.g. "Pro - 7 days", not "PRO - 7 DAYS").
+ * Re-verified live on 2026-07-30 via each card's heading text.
+ */
 export const PLAN_NAMES = [
-  'FREE',
-  'FREE - 7 DAYS',
-  'CUSTOM FREE',
-  'PRO',
-  'PRO - 7 DAYS',
-  'TEAM',
-  'ENQUIRY',
+  'Free',
+  'Free - 7 days',
+  'Custom Free',
+  'Pro',
+  'Pro - 7 days',
+  'Team',
+  'Enquiry',
 ] as const;
 
 /**
@@ -76,12 +80,12 @@ export const PLAN_NAMES = [
  * regression tests that caught BUG-02.
  */
 export const EXPECTED_PRICING = {
-  FREE: { amount: '₹0', cadence: null },
-  'FREE - 7 DAYS': { amount: '₹0', cadence: null },
-  'CUSTOM FREE': { amount: '₹0', cadence: null },
-  PRO: { amount: '₹5,000', cadence: '/ month' },
-  'PRO - 7 DAYS': { amount: '₹100', cadence: '/ day' },
-  TEAM: { amount: '₹35,000', cadence: '/ month' },
+  Free: { amount: '₹0', cadence: null },
+  'Free - 7 days': { amount: '₹0', cadence: null },
+  'Custom Free': { amount: '₹0', cadence: null },
+  Pro: { amount: '₹5,000', cadence: '/ month' },
+  'Pro - 7 days': { amount: '₹100', cadence: '/ day' },
+  Team: { amount: '₹35,000', cadence: '/ month' },
 } as const;
 
 /**

@@ -29,8 +29,14 @@ export class CheckoutPage {
     await this.upgradePlanButton.click();
   }
 
+  /**
+   * Locates the "Choose <plan>" CTA inside the upgrade modal for an exact
+   * plan name. Anchored with `$` so e.g. "Pro" doesn't also match
+   * "Choose Pro - 7 days".
+   */
   choosePlanInModal(planName: string): Locator {
-    return this.page.getByRole('button', { name: new RegExp(`CHOOSE\\s+${planName}`, 'i') });
+    const escaped = planName.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+    return this.page.getByRole('button', { name: new RegExp(`^choose\\s+${escaped}$`, 'i') });
   }
 
   /** The "Confirm Plan Change" summary dialog (current plan -> new plan, total). */
