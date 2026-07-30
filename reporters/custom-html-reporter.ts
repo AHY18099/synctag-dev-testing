@@ -24,15 +24,25 @@ interface TestRecord {
   screenshotDataUri: string | null;
 }
 
+type Priority = 'Highest' | 'High' | 'Medium' | 'Low';
+type Status = 'Open' | 'Needs Triage';
+
 interface IssueRecord {
   id: string;
+  key: string;
   module: string;
   title: string;
   severity: Severity;
+  priority: Priority;
+  status: Status;
   classification: Classification;
   whatHappened: string;
   likelyCause: string;
   recommendation: string;
+  stepsToReproduce: string[];
+  expectedResult: string;
+  actualResult: string;
+  environment: string;
   screenshotDataUri: string | null;
 }
 
@@ -117,6 +127,8 @@ interface Explanation {
   likelyCause: string;
   recommendation: string;
   classification: Classification;
+  expectedResult: string;
+  actualResult: string;
 }
 
 /**
@@ -132,6 +144,8 @@ function explainFailure(errorMessage: string): Explanation {
       likelyCause: 'This looks like a side effect of running many sign-in tests back-to-back in a short time — the verification-code system may have temporarily slowed down or paused sending to protect against spam. It is not a confirmed fault in the app itself.',
       recommendation: 'Re-run this check on its own, with a short gap since the last one, to confirm whether it passes normally.',
       classification: 'Test Environment',
+      expectedResult: 'The verification code arrives in the inbox within a few seconds of being requested.',
+      actualResult: 'No verification code had arrived after waiting 60 seconds.',
     };
   }
   if (/Verify your access/i.test(m)) {
@@ -140,6 +154,8 @@ function explainFailure(errorMessage: string): Explanation {
       likelyCause: 'Most likely the same temporary slowdown in the verification-code system mentioned above, rather than a broken screen — this screen has been confirmed working correctly in other passes.',
       recommendation: 'Re-run this check after a short cooldown period to confirm.',
       classification: 'Test Environment',
+      expectedResult: 'The "Verify your access" code-entry screen appears immediately after requesting a code.',
+      actualResult: 'The code-entry screen had not appeared within the wait window.',
     };
   }
   if (/getByRole\('button', \{ name: 'Verify Code' \}\)/i.test(m)) {
@@ -148,6 +164,8 @@ function explainFailure(errorMessage: string): Explanation {
       likelyCause: 'A knock-on effect of the verification-code screen not appearing in time — not a separate, standalone problem.',
       recommendation: 'Re-run alongside the other sign-in checks once the cooldown has passed.',
       classification: 'Test Environment',
+      expectedResult: 'The "Verify Code" button is visible and clickable once the code-entry screen loads.',
+      actualResult: 'The "Verify Code" button never appeared within the wait window.',
     };
   }
   if (/getByRole\('textbox', \{ name: 'Verification Code' \}\)/i.test(m)) {
@@ -156,6 +174,8 @@ function explainFailure(errorMessage: string): Explanation {
       likelyCause: 'A knock-on effect of the verification-code screen not appearing in time.',
       recommendation: 'Re-run alongside the other sign-in checks once the cooldown has passed.',
       classification: 'Test Environment',
+      expectedResult: 'The verification-code input box is visible on the code-entry screen.',
+      actualResult: 'The verification-code input box never appeared within the wait window.',
     };
   }
   if (/Resend OTP in/i.test(m)) {
@@ -164,6 +184,8 @@ function explainFailure(errorMessage: string): Explanation {
       likelyCause: 'A knock-on effect of the verification-code screen not appearing in time.',
       recommendation: 'Re-run alongside the other sign-in checks once the cooldown has passed.',
       classification: 'Test Environment',
+      expectedResult: 'A "Resend code in Xs" countdown is shown right after a code is sent.',
+      actualResult: 'The countdown message never appeared.',
     };
   }
   if (/does not support recurring payments/i.test(m) || /Payment could not be completed/i.test(m)) {
@@ -172,6 +194,8 @@ function explainFailure(errorMessage: string): Explanation {
       likelyCause: 'The payment provider (Razorpay) account behind this plan is not fully set up to accept repeating (subscription-style) charges.',
       recommendation: 'Escalate to the payments/finance team to enable recurring billing on the account before this plan goes live — customers cannot currently buy it.',
       classification: 'Confirmed Issue',
+      expectedResult: 'The payment is accepted and the plan is upgraded to the recurring subscription.',
+      actualResult: 'Razorpay rejected the transaction with "the seller does not support recurring payments."',
     };
   }
   if (/Payment successful\|Plan upgraded\|Subscription active/i.test(m)) {
@@ -180,6 +204,8 @@ function explainFailure(errorMessage: string): Explanation {
       likelyCause: 'Either the payment is taking longer than expected to confirm, or the confirmation message uses different wording than what a customer would recognize as success.',
       recommendation: 'Have someone manually run this exact purchase to see what actually appears on screen, then confirm whether the plan was really upgraded on the account.',
       classification: 'Confirmed Issue',
+      expectedResult: 'A "Payment successful" / "Plan upgraded" confirmation appears within 20 seconds of submitting payment.',
+      actualResult: 'No recognizable success confirmation appeared within 20 seconds.',
     };
   }
   if (/Payment failed\|declined\|try a different/i.test(m)) {
@@ -188,6 +214,8 @@ function explainFailure(errorMessage: string): Explanation {
       likelyCause: 'Either the decline takes longer to come back than expected, or the failure message uses different wording than a customer would recognize as "your payment didn’t go through."',
       recommendation: 'Have someone manually run this exact declined-card scenario to see what actually appears on screen, and confirm the customer isn’t left unsure whether they were charged.',
       classification: 'Confirmed Issue',
+      expectedResult: 'A clear "payment failed" / "declined" / "try a different card" message appears within 20 seconds.',
+      actualResult: 'No recognizable failure message appeared within 20 seconds.',
     };
   }
   if (/name: 'Upgrade Plan'/i.test(m) || /name: \/\^choose/i.test(m)) {
@@ -196,12 +224,16 @@ function explainFailure(errorMessage: string): Explanation {
       likelyCause: 'A pop-up that appears the first time a new account visits this page (choosing a profile theme) can sometimes still be on screen and block the button underneath it.',
       recommendation: 'Confirm this pop-up is reliably dismissed before a customer can act on this page, on every visit, not just most visits.',
       classification: 'Confirmed Issue',
+      expectedResult: 'The "Upgrade Plan" / "Choose [plan]" button is clickable as soon as the page loads.',
+      actualResult: 'The click was blocked because another element (the profile-theme pop-up) was covering the button.',
     };
   }
   return {
     whatHappened: 'The check did not complete as expected.',
     likelyCause: 'See the technical detail for this test in the results table.',
     recommendation: 'Needs a closer look by the engineering team.',
+    expectedResult: 'The step described in this check completes successfully.',
+    actualResult: 'The step did not complete — see the technical detail in the Test Results tab for this check.',
     classification: 'Confirmed Issue',
   };
 }
@@ -210,6 +242,50 @@ function severityFor(fileBase: string, classification: Classification): Severity
   if (classification === 'Test Environment') return 'Low';
   if (fileBase === 'checkout.spec.ts') return 'High';
   return 'Medium';
+}
+
+function priorityFor(severity: Severity, classification: Classification): Priority {
+  if (classification === 'Test Environment') return 'Low';
+  if (severity === 'High') return 'Highest';
+  if (severity === 'Medium') return 'Medium';
+  return 'Low';
+}
+
+function statusFor(classification: Classification): Status {
+  return classification === 'Confirmed Issue' ? 'Open' : 'Needs Triage';
+}
+
+/**
+ * A short, numbered reproduction path built from the plain-English test
+ * description. Not a literal script — enough for anyone on the team to
+ * retrace the same customer journey by hand.
+ */
+function stepsFor(fileBase: string, title: string): string[] {
+  const common = ['Go to devextension.synctag.com.'];
+  if (fileBase === 'auth.spec.ts') {
+    return [
+      ...common,
+      'Open the sign-in / sign-up screen.',
+      /email/i.test(title) ? 'Choose the email option and enter the test address.' : 'Enter a phone number or email as described in the check above.',
+      'Request a verification code and continue as a customer would.',
+    ];
+  }
+  if (fileBase === 'pricing.spec.ts') {
+    return [
+      ...common,
+      'Open the public Pricing page.',
+      'Compare the plan cards and their advertised features/price as described in the check above.',
+    ];
+  }
+  if (fileBase === 'checkout.spec.ts') {
+    return [
+      ...common,
+      'Sign in with a test account.',
+      'Open the plan-upgrade screen and select the plan named in the check above.',
+      'Enter the test card details for this scenario and confirm payment.',
+    ];
+  }
+  return [...common, 'Follow the steps for the check described above.'];
 }
 
 class CustomHtmlReporter implements Reporter {
@@ -277,15 +353,23 @@ class CustomHtmlReporter implements Reporter {
     const failingRecords = this.records.filter((r) => r.status === 'failed' || r.status === 'timedOut');
     const issues: IssueRecord[] = failingRecords.map((r, i) => {
       const explanation = explainFailure(r.errorMessage);
+      const severity = severityFor(r.file, explanation.classification);
       return {
         id: `ISSUE-${String(i + 1).padStart(2, '0')}`,
+        key: `SYNCTAG-${100 + i}`,
         module: r.module,
         title: r.description,
-        severity: severityFor(r.file, explanation.classification),
+        severity,
+        priority: priorityFor(severity, explanation.classification),
+        status: statusFor(explanation.classification),
         classification: explanation.classification,
         whatHappened: explanation.whatHappened,
         likelyCause: explanation.likelyCause,
         recommendation: explanation.recommendation,
+        stepsToReproduce: stepsFor(r.file, r.title),
+        expectedResult: explanation.expectedResult,
+        actualResult: explanation.actualResult,
+        environment: `Staging — ${process.env.BASE_URL || 'devextension.synctag.com'} (Chromium)`,
         screenshotDataUri: r.screenshotDataUri,
       };
     });
@@ -338,38 +422,93 @@ class CustomHtmlReporter implements Reporter {
       .join('');
 
     const sevClass: Record<Severity, string> = { High: 'sev-high', Medium: 'sev-med', Low: 'sev-low' };
-    const classBadgeClass: Record<Classification, string> = { 'Confirmed Issue': 'class-confirmed', 'Test Environment': 'class-env' };
+    const prClass: Record<Priority, string> = { Highest: 'pr-highest', High: 'pr-high', Medium: 'pr-medium', Low: 'pr-low' };
+    const prIcon: Record<Priority, string> = { Highest: '&#8593;&#8593;', High: '&#8593;', Medium: '&#8801;', Low: '&#8595;' };
+    const statusClass: Record<Status, string> = { Open: 'st-open', 'Needs Triage': 'st-triage' };
 
     const bugCards = issues
       .map((b) => {
         const shot = b.screenshotDataUri
-          ? `<figure class="bug-shot"><img src="${b.screenshotDataUri}" alt="Screenshot of the issue"></figure>`
+          ? `<figure class="ticket-shot"><figcaption>Attachment &mdash; screenshot.png</figcaption><img src="${b.screenshotDataUri}" alt="Screenshot of the issue"></figure>`
           : '';
-        return `<div class="bcard ${b.classification === 'Confirmed Issue' ? 'flagged' : ''}">
-          <div class="bcard-head">
-            <div class="bcard-head-left">
-              <span class="bcard-id">${esc(b.id)}</span>
-              <span class="badge ${sevClass[b.severity]}">${esc(b.severity)} impact</span>
-              <span class="badge ${classBadgeClass[b.classification]}">${esc(b.classification)}</span>
+        const steps = b.stepsToReproduce.map((s) => `<li>${esc(s)}</li>`).join('');
+        return `<article class="ticket">
+          <div class="ticket-head">
+            <div class="ticket-head-top">
+              <span class="ticket-type"><span class="type-icon">&#128030;</span>Bug</span>
+              <span class="ticket-key">${esc(b.key)}</span>
+              <span class="ticket-module">${esc(b.module)}</span>
             </div>
-            <span class="bcard-module">${esc(b.module)}</span>
+            <h3 class="ticket-summary">${esc(b.title)}</h3>
           </div>
-          <h3 class="bcard-title">${esc(b.title)}</h3>
-          <div class="bcard-grid">
-            <div class="bcard-text">
-              <div class="bfield"><span class="bfield-k">What we saw</span><p>${esc(b.whatHappened)}</p></div>
-              <div class="bfield"><span class="bfield-k">Likely reason</span><p>${esc(b.likelyCause)}</p></div>
-              <div class="bfield"><span class="bfield-k">What we recommend</span><p>${esc(b.recommendation)}</p></div>
+          <div class="ticket-body">
+            <div class="ticket-main">
+              <section class="ticket-section">
+                <h4>Description</h4>
+                <p>${esc(b.whatHappened)}</p>
+              </section>
+              <section class="ticket-section">
+                <h4>Steps to reproduce</h4>
+                <ol class="ticket-steps">${steps}</ol>
+              </section>
+              <div class="ticket-outcome">
+                <div class="outcome-box expected">
+                  <span class="outcome-k">Expected result</span>
+                  <p>${esc(b.expectedResult)}</p>
+                </div>
+                <div class="outcome-box actual">
+                  <span class="outcome-k">Actual result</span>
+                  <p>${esc(b.actualResult)}</p>
+                </div>
+              </div>
+              <section class="ticket-section">
+                <h4>Root cause</h4>
+                <p>${esc(b.likelyCause)}</p>
+              </section>
+              <section class="ticket-section">
+                <h4>Recommended fix</h4>
+                <p>${esc(b.recommendation)}</p>
+              </section>
+              ${shot}
             </div>
-            ${shot}
+            <aside class="ticket-side">
+              <div class="side-field">
+                <span class="side-k">Status</span>
+                <span class="side-pill ${statusClass[b.status]}">${esc(b.status)}</span>
+              </div>
+              <div class="side-field">
+                <span class="side-k">Priority</span>
+                <span class="side-val pr ${prClass[b.priority]}"><span class="pr-arrow">${prIcon[b.priority]}</span>${esc(b.priority)}</span>
+              </div>
+              <div class="side-field">
+                <span class="side-k">Severity</span>
+                <span class="badge ${sevClass[b.severity]}">${esc(b.severity)}</span>
+              </div>
+              <div class="side-field">
+                <span class="side-k">Classification</span>
+                <span class="side-val">${esc(b.classification)}</span>
+              </div>
+              <div class="side-field">
+                <span class="side-k">Component</span>
+                <span class="side-val">${esc(b.module)}</span>
+              </div>
+              <div class="side-field">
+                <span class="side-k">Environment</span>
+                <span class="side-val">${esc(b.environment)}</span>
+              </div>
+              <div class="side-field">
+                <span class="side-k">Reported by</span>
+                <span class="side-val">Synctag QA Automation</span>
+              </div>
+            </aside>
           </div>
-        </div>`;
+        </article>`;
       })
       .join('');
 
     const noIssuesCard =
       issues.length === 0
-        ? '<div class="bcard"><h3 class="bcard-title">No issues found in this run.</h3></div>'
+        ? '<div class="ticket"><div class="ticket-head"><h3 class="ticket-summary">No issues found in this run.</h3></div></div>'
         : '';
 
     const html = `<!doctype html>
@@ -434,8 +573,8 @@ ${CSS}
 
     <section class="panel" id="panel-issues">
       <h2 class="section-title">Issues found</h2>
-      <p class="section-sub">One card per problem. "Confirmed Issue" means we’re confident this affects real customers. "Test Environment" means the check itself hit a snag (like a slow test inbox) &mdash; likely not a real product problem, but included for transparency.</p>
-      <div class="bug-list">${bugCards}${noIssuesCard}</div>
+      <p class="section-sub">One ticket per problem, in the same format as an engineering bug tracker. "Confirmed Issue" means we’re confident this affects real customers. "Test Environment" means the check itself hit a snag (like a slow test inbox) &mdash; likely not a real product problem, but included for transparency.</p>
+      <div class="ticket-list">${bugCards}${noIssuesCard}</div>
     </section>
   </main>
 
@@ -590,30 +729,65 @@ const CSS = `
   .shot-close { position:absolute; top:-14px; right:-14px; width:32px; height:32px; border-radius:50%;
     background:var(--ink); color:var(--paper); border:none; font-size:18px; cursor:pointer;
     display:flex; align-items:center; justify-content:center; line-height:1; }
-  .bug-list { display:flex; flex-direction:column; gap:18px; }
-  .bcard { background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
-    padding:22px 24px; box-shadow:var(--shadow); border-left:4px solid var(--line-strong); }
-  .bcard.flagged { border-left-color:var(--bad); }
-  .bcard-head { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px; }
-  .bcard-head-left { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-  .bcard-id { font-size:12px; font-weight:700; color:var(--muted); letter-spacing:0.02em; }
-  .bcard-module { font-size:12px; font-weight:600; color:var(--accent); background:var(--accent-soft); padding:3px 10px; border-radius:999px; }
   .badge { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.02em; padding:4px 10px; border-radius:999px; }
   .sev-high { background:var(--bad-soft); color:var(--bad); }
   .sev-medium, .sev-med { background:var(--warn-soft); color:var(--warn); }
   .sev-low { background:var(--line); color:var(--muted); }
   .class-confirmed { background:var(--bad-soft); color:var(--bad); }
   .class-env { background:var(--line); color:var(--muted); }
-  .bcard-title { font-size:17px; font-weight:700; margin:0 0 16px; line-height:1.4; text-wrap:balance; }
-  .bcard-grid { display:grid; grid-template-columns:1.4fr 1fr; gap:22px; align-items:start; }
-  .bfield { margin-bottom:14px; } .bfield:last-child { margin-bottom:0; }
-  .bfield-k { display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.03em; color:var(--muted); margin-bottom:4px; }
-  .bfield p { margin:0; font-size:14px; color:var(--ink-soft); line-height:1.55; }
-  .bug-shot { margin:0; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--paper); }
-  .bug-shot img { display:block; width:100%; height:auto; }
   footer { border-top:1px solid var(--line); padding-top:22px; margin-top:48px; display:flex;
     justify-content:space-between; gap:12px; flex-wrap:wrap; font-size:12px; color:var(--muted); }
-  @media (max-width:860px) { .kpi-row { grid-template-columns:repeat(2,1fr); } .bcard-grid { grid-template-columns:1fr; } }
+
+  .ticket-list { display:flex; flex-direction:column; gap:20px; }
+  .ticket { background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+    box-shadow:var(--shadow); overflow:hidden; }
+  .ticket-head { padding:20px 24px 18px; border-bottom:1px solid var(--line); background:
+    linear-gradient(180deg, var(--accent-soft) 0%, transparent 100%); }
+  .ticket-head-top { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+  .ticket-type { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700;
+    color:var(--bad); background:var(--bad-soft); padding:4px 10px 4px 8px; border-radius:6px; }
+  .type-icon { font-size:12px; line-height:1; }
+  .ticket-key { font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace; font-size:12.5px;
+    font-weight:700; color:var(--accent); letter-spacing:0.01em; }
+  .ticket-module { font-size:11.5px; font-weight:600; color:var(--muted); margin-left:auto;
+    background:var(--paper); border:1px solid var(--line-strong); padding:3px 10px; border-radius:999px; }
+  .ticket-summary { font-size:18px; font-weight:700; margin:0; line-height:1.4; letter-spacing:-0.01em; text-wrap:balance; }
+  .ticket-body { display:grid; grid-template-columns:1fr 240px; gap:0; }
+  .ticket-main { padding:22px 24px; border-right:1px solid var(--line); min-width:0; }
+  .ticket-section { margin-bottom:20px; }
+  .ticket-section:last-of-type { margin-bottom:20px; }
+  .ticket-section h4 { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em;
+    color:var(--muted); margin:0 0 8px; }
+  .ticket-section p { margin:0; font-size:14px; color:var(--ink-soft); line-height:1.6; }
+  .ticket-steps { margin:0; padding-left:20px; font-size:14px; color:var(--ink-soft); line-height:1.7; }
+  .ticket-steps li { margin-bottom:4px; }
+  .ticket-outcome { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:20px; }
+  .outcome-box { border-radius:8px; padding:12px 14px; border:1px solid var(--line); }
+  .outcome-box.expected { background:var(--good-soft); border-color:var(--good); border-left-width:3px; }
+  .outcome-box.actual { background:var(--bad-soft); border-color:var(--bad); border-left-width:3px; }
+  .outcome-k { display:block; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:5px; }
+  .outcome-box.expected .outcome-k { color:var(--good); }
+  .outcome-box.actual .outcome-k { color:var(--bad); }
+  .outcome-box p { margin:0; font-size:13.5px; line-height:1.55; color:var(--ink-soft); }
+  .ticket-shot { margin:0; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--paper); }
+  .ticket-shot figcaption { font-size:11px; font-weight:600; color:var(--muted); padding:8px 12px;
+    border-bottom:1px solid var(--line); background:var(--card); }
+  .ticket-shot img { display:block; width:100%; height:auto; }
+  .ticket-side { padding:22px 20px; background:var(--paper); display:flex; flex-direction:column; gap:16px; }
+  .side-field { display:flex; flex-direction:column; gap:5px; }
+  .side-k { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:var(--muted); }
+  .side-val { font-size:13.5px; font-weight:600; color:var(--ink); }
+  .side-pill { display:inline-flex; align-items:center; font-size:12px; font-weight:700; padding:4px 10px;
+    border-radius:6px; width:fit-content; }
+  .st-open { background:var(--bad-soft); color:var(--bad); }
+  .st-triage { background:var(--warn-soft); color:var(--warn); }
+  .side-val.pr { display:inline-flex; align-items:center; gap:5px; font-weight:700; width:fit-content; }
+  .pr-arrow { font-size:12px; line-height:1; }
+  .pr-highest { color:var(--bad); } .pr-high { color:var(--bad); }
+  .pr-medium { color:var(--warn); } .pr-low { color:var(--good); }
+  @media (max-width:860px) { .kpi-row { grid-template-columns:repeat(2,1fr); }
+    .ticket-body { grid-template-columns:1fr; } .ticket-main { border-right:none; border-bottom:1px solid var(--line); }
+    .ticket-outcome { grid-template-columns:1fr; } }
   @media (max-width:620px) { .tabs { overflow-x:auto; } }
 `;
 
