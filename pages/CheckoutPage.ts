@@ -23,6 +23,29 @@ export class CheckoutPage {
     // domcontentloaded, not the default 'load': third-party tracker scripts
     // on this site can keep the load event from firing for a long time.
     await this.page.goto('/profile?tab=plan', { waitUntil: 'domcontentloaded' });
+    await this.dismissFirstRunThemeModalIfShown();
+  }
+
+  /**
+   * A brand-new account's first authenticated page load can show a
+   * "Choose Your Profile Theme" modal, which otherwise sits on top of the
+   * page and intercepts every subsequent click (confirmed live: it blocks
+   * the Upgrade Plan button with a pointer-events interception error).
+   * There's no visible close/skip control - "APPLY" (with whatever theme
+   * is pre-selected) is the only way through it.
+   */
+  private async dismissFirstRunThemeModalIfShown(timeout = 5000): Promise<void> {
+    // waitFor (not isVisible({timeout})) - isVisible with a timeout is a
+    // single check that respects actionability waits but does not poll,
+    // so it can miss a modal that renders a moment after goto() resolves.
+    const modalHeading = this.page.getByText('Choose Your Profile Theme');
+    const shown = await modalHeading
+      .waitFor({ state: 'visible', timeout })
+      .then(() => true)
+      .catch(() => false);
+    if (!shown) return;
+    await this.page.getByRole('button', { name: 'APPLY' }).click();
+    await modalHeading.waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
   }
 
   async openUpgradeModal() {
