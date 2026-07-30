@@ -102,6 +102,15 @@ export class CheckoutPage {
     await frame.getByPlaceholder('MM / YY').fill(card.expiry);
     await frame.getByPlaceholder('CVV').fill(card.cvv);
     await frame.getByRole('button', { name: 'Continue' }).click();
+
+    // For a recurring/subscription plan, an RBI-mandated "Save your card ...
+    // Required for recurring payments" tokenization consent dialog can
+    // appear next (confirmed live) - it's a real, required step, not an
+    // optional one, so it must be accepted for the flow to proceed at all.
+    const rbiConsent = this.page.getByRole('button', { name: 'Yes, secure my card' });
+    if (await rbiConsent.isVisible({ timeout: 8000 }).catch(() => false)) {
+      await rbiConsent.click();
+    }
   }
 
   paymentSuccessIndicator(): Locator {
