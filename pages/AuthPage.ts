@@ -1,4 +1,4 @@
-import { Page, Locator, expect } from '@playwright/test';
+import { Page, Locator, BrowserContext, expect } from '@playwright/test';
 
 /**
  * Page object for /auth (unified passwordless login + signup screen).
@@ -75,28 +75,40 @@ export class AuthPage {
   }
 
   /**
-   * Mocks the OTP-verification network call so positive login/signup can be
-   * asserted end-to-end without a real inbox/SMS. MUST be called BEFORE
-   * submitOtp(). The dev team should confirm/adjust the URL glob to match
-   * the real verify-otp endpoint (see README.md - "OTP mocking strategy").
+   * Retrieves the real 6-digit OTP for `email` from its public Mailinator
+   * inbox (requestEmailOtp must already have been called for this address).
+   * Polls the inbox for up to ~60s since delivery isn't instant. Opens a
+   * scratch tab on `context` and closes it before returning.
    */
-  async mockOtpVerifySuccess(urlPattern: string | RegExp = '**/*verify*otp*') {
-    await this.page.route(urlPattern, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ success: true, token: 'mocked-jwt-for-qa', user: { id: 'qa-mock-user' } }),
-      });
-    });
-  }
-
-  async mockOtpVerifyFailure(urlPattern: string | RegExp = '**/*verify*otp*') {
-    await this.page.route(urlPattern, async (route) => {
-      await route.fulfill({
-        status: 400,
-        contentType: 'application/json',
-        body: JSON.stringify({ success: false, message: 'Invalid verification code.' }),
-      });
-    });
+  async getRealOtpFromMailinator(context: BrowserContext, email: string): Promise<string> {
+    const inboxName = email.split('@')[0];
+    const inbox = await context.newPage();
+    let otp = '';
+    try {
+      for (let attempt = 0; attempt < 30 && !otp; attempt++) {
+        await inbox.goto(`https://www.mailinator.com/v4/public/inboxes.jsp?to=${inboxName}`, {
+          waitUntil: 'domcontentloaded',
+          timeout: 30_000,
+        });
+        await inbox.waitForTimeout(2000);
+        const row = inbox.locator('tr.ng-scope, [class*="inbox-row"], table tbody tr').first();
+        if (!(await row.isVisible({ timeout: 1500 }).catch(() => false))) continue;
+        await row.click();
+        await inbox.waitForTimeout(1500);
+        const bodyText = await (async () => {
+          try {
+            return await inbox.frameLocator('#html_msg_body, iframe').locator('body').innerText({ timeout: 5000 });
+          } catch {
+            return inbox.locator('body').innerText();
+          }
+        })();
+        const match = /\b(\d{6})\b/.exec(bodyText);
+        if (match) otp = match[1];
+      }
+    } finally {
+      await inbox.close();
+    }
+    if (!otp) throw new Error(`Real OTP not found in Mailinator inbox for ${email} after 60s`);
+    return otp;
   }
 }

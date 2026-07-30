@@ -5,17 +5,11 @@ import { uniqueTestEmail, uniqueTestPhone } from '../fixtures/testData';
 /**
  * Login / Signup coverage for /auth.
  *
- * IMPORTANT - OTP limitation: the app is fully passwordless. Both "Sign in"
- * and "Create account" only accept a phone or email OTP (or Google OAuth).
- * There is no test-mode bypass code available to this suite, so:
- *   - All FRONT-END validation and error-handling scenarios below run
- *     against the real backend and are fully self-verifying.
- *   - The two "positive end-to-end login succeeds" scenarios mock the
- *     verify-OTP network response (see AuthPage.mockOtpVerifySuccess) so
- *     they only prove the client correctly HANDLES a successful verify
- *     response (redirect, session state) - they do NOT prove the real
- *     OTP backend issues/accepts codes correctly. Confirm the URL pattern
- *     against the real API before trusting these two tests' results.
+ * The app is fully passwordless. Both "Sign in" and "Create account" only
+ * accept a phone or email OTP (or Google OAuth). Email OTP addresses are
+ * real, pollable Mailinator public inboxes (see uniqueTestEmail() and
+ * AuthPage.getRealOtpFromMailinator), so the end-to-end login test
+ * completes against the real backend rather than a mocked response.
  */
 
 test.describe('Auth - entry screen', () => {
@@ -175,14 +169,15 @@ test.describe('Auth - OTP verification', () => {
     await expect(page.getByText(/Resend OTP in \d+s/)).toBeVisible();
   });
 
-  test('mocked verify-OTP success redirects the user out of the auth flow [positive, mocked backend]', async ({ page }) => {
+  test('real verify-OTP success redirects the user out of the auth flow [positive, real backend]', async ({ page, context }) => {
     const auth = new AuthPage(page);
+    const email = uniqueTestEmail();
     await auth.gotoLogin();
-    await auth.requestEmailOtp(uniqueTestEmail());
-    await auth.mockOtpVerifySuccess();
-    await auth.enterOtp('123456');
+    await auth.requestEmailOtp(email);
+    const otp = await auth.getRealOtpFromMailinator(context, email);
+    await auth.enterOtp(otp);
     await auth.submitOtp();
-    await expect(page).not.toHaveURL(/\/auth/, { timeout: 10_000 });
+    await expect(page).not.toHaveURL(/\/auth/, { timeout: 20_000 });
   });
 });
 

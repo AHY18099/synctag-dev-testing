@@ -84,8 +84,15 @@ export const EXPECTED_PRICING = {
   TEAM: { amount: '₹35,000', cadence: '/ month' },
 } as const;
 
-export function uniqueTestEmail(prefix = 'qa.synctag'): string {
-  return `${prefix}.${Date.now()}@example.com`;
+/**
+ * Generates a unique, real, pollable Mailinator address (public inbox — do
+ * not use for anything sensitive). Mailinator inbox names must be
+ * alphanumeric/hyphen only, so the prefix is sanitized and the timestamp
+ * keeps each test run's address unique.
+ */
+export function uniqueTestEmail(prefix = 'qa-synctag'): string {
+  const safePrefix = prefix.replace(/[^a-z0-9-]/gi, '-');
+  return `${safePrefix}-${Date.now()}@mailinator.com`;
 }
 
 export function uniqueTestPhone(): string {

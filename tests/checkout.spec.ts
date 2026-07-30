@@ -1,4 +1,5 @@
-import { test, expect } from '@playwright/test';
+import { test as base, expect } from '@playwright/test';
+import * as path from 'node:path';
 import { AuthPage } from '../pages/AuthPage';
 import { CheckoutPage } from '../pages/CheckoutPage';
 import { RAZORPAY_TEST_CARDS, INVALID_CARDS, uniqueTestEmail } from '../fixtures/testData';
@@ -8,29 +9,47 @@ import { RAZORPAY_TEST_CARDS, INVALID_CARDS, uniqueTestEmail } from '../fixtures
  * which opens an embedded Razorpay Checkout (confirmed TEST MODE via the
  * red "Test Mode" ribbon during manual exploration - see README.md).
  *
- * All tests in this file require an authenticated session. Because OTP
- * verification cannot be completed against the real backend from this
- * suite (see auth.spec.ts), each test logs in via the mocked verify-OTP
- * response. If your environment instead has a fixture account +
- * storageState available, prefer that (faster, and exercises the real
- * session) - see README.md "Recommended: storageState login".
+ * All tests in this file require an authenticated session. A single real
+ * Mailinator email-OTP login runs once (see `test.beforeAll` below) and its
+ * session is saved to storageState; every test in this file then reuses
+ * that saved session via the `authedPage` fixture, per README.md
+ * "Recommended: storageState login" - this avoids burning a fresh OTP per
+ * test (Mailinator/OTP-send rate limits a tight loop of requests to the
+ * same inbox) while still exercising a real, non-mocked login once.
  *
  * SAFETY: assertTestModeBannerVisible() is called before any card is
  * submitted. Do not remove this guard - it is what makes it safe to run
  * real-looking card numbers against this suite at all.
  */
 
-test.beforeEach(async ({ page }) => {
+const CHECKOUT_AUTH_FILE = path.resolve(__dirname, '..', '.checkout-auth-state.json');
+
+const test = base.extend<{ authedPage: import('@playwright/test').Page }>({
+  authedPage: async ({ browser }, use) => {
+    const context = await browser.newContext({ storageState: CHECKOUT_AUTH_FILE });
+    const page = await context.newPage();
+    await use(page);
+    await context.close();
+  },
+});
+
+test.beforeAll(async ({ browser }) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
   const auth = new AuthPage(page);
+  const email = uniqueTestEmail('qa-checkout');
   await auth.gotoLogin();
-  await auth.requestEmailOtp(uniqueTestEmail());
-  await auth.mockOtpVerifySuccess();
-  await auth.enterOtp('123456');
+  await auth.requestEmailOtp(email);
+  const otp = await auth.getRealOtpFromMailinator(context, email);
+  await auth.enterOtp(otp);
   await auth.submitOtp();
+  await expect(page).not.toHaveURL(/\/auth/, { timeout: 20_000 });
+  await context.storageState({ path: CHECKOUT_AUTH_FILE });
+  await context.close();
 });
 
 test.describe('Checkout - successful payment scenarios', () => {
-  test('upgrading to PRO - 7 DAYS with a successful Visa test card completes payment [positive]', async ({ page }) => {
+  test('upgrading to PRO - 7 DAYS with a successful Visa test card completes payment [positive]', async ({ authedPage: page }) => {
     const checkout = new CheckoutPage(page);
     await checkout.goto();
     await checkout.openUpgradeModal();
@@ -41,7 +60,7 @@ test.describe('Checkout - successful payment scenarios', () => {
     await expect(checkout.paymentSuccessIndicator()).toBeVisible({ timeout: 20_000 });
   });
 
-  test('upgrading to PRO with a successful Mastercard test card completes payment [positive]', async ({ page }) => {
+  test('upgrading to PRO with a successful Mastercard test card completes payment [positive]', async ({ authedPage: page }) => {
     const checkout = new CheckoutPage(page);
     await checkout.goto();
     await checkout.openUpgradeModal();
@@ -54,7 +73,7 @@ test.describe('Checkout - successful payment scenarios', () => {
 });
 
 test.describe('Checkout - declined payment scenarios', () => {
-  test('a generic decline test card surfaces a payment-failed message, not a false success [negative]', async ({ page }) => {
+  test('a generic decline test card surfaces a payment-failed message, not a false success [negative]', async ({ authedPage: page }) => {
     const checkout = new CheckoutPage(page);
     await checkout.goto();
     await checkout.openUpgradeModal();
@@ -66,7 +85,7 @@ test.describe('Checkout - declined payment scenarios', () => {
     await expect(checkout.paymentSuccessIndicator()).not.toBeVisible();
   });
 
-  test('an insufficient-funds test card surfaces a payment-failed message [negative]', async ({ page }) => {
+  test('an insufficient-funds test card surfaces a payment-failed message [negative]', async ({ authedPage: page }) => {
     const checkout = new CheckoutPage(page);
     await checkout.goto();
     await checkout.openUpgradeModal();
@@ -77,7 +96,7 @@ test.describe('Checkout - declined payment scenarios', () => {
     await expect(checkout.paymentFailureIndicator()).toBeVisible({ timeout: 20_000 });
   });
 
-  test('the account plan must NOT be upgraded after a declined payment [negative]', async ({ page }) => {
+  test('the account plan must NOT be upgraded after a declined payment [negative]', async ({ authedPage: page }) => {
     const checkout = new CheckoutPage(page);
     await checkout.goto();
     await checkout.openUpgradeModal();
@@ -94,7 +113,7 @@ test.describe('Checkout - declined payment scenarios', () => {
 
 test.describe('Checkout - invalid card input (client-side validation)', () => {
   for (const [name, card] of Object.entries(INVALID_CARDS)) {
-    test(`rejects invalid card input: ${name} [negative]`, async ({ page }) => {
+    test(`rejects invalid card input: ${name} [negative]`, async ({ authedPage: page }) => {
       const checkout = new CheckoutPage(page);
       await checkout.goto();
       await checkout.openUpgradeModal();
@@ -115,7 +134,7 @@ test.describe('Checkout - invalid card input (client-side validation)', () => {
 });
 
 test.describe('Checkout - plan pricing/billing consistency (BUG-02 regression)', () => {
-  test('the Confirm Plan Change dialog for "PRO - 7 DAYS" must not silently switch cadence to Monthly', async ({ page }) => {
+  test('the Confirm Plan Change dialog for "PRO - 7 DAYS" must not silently switch cadence to Monthly', async ({ authedPage: page }) => {
     // Documented finding: the pricing page advertises "PRO - 7 DAYS" as
     // ₹100/day, but the authenticated Confirm Plan Change dialog shows
     // "₹100 /mo" and labels billing as "Monthly", and the downstream

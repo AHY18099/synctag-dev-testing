@@ -22,6 +22,7 @@ Thumbs.db
 
 # Auth session (contains live tokens — never commit)
 auth-state.json
+.checkout-auth-state.json
 
 # Claude Code internal directory
 .claude/
