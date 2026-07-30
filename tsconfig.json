@@ -8,5 +8,5 @@
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
-  "include": ["tests", "pages", "fixtures"]
+  "include": ["tests", "pages", "fixtures", "reporters"]
 }

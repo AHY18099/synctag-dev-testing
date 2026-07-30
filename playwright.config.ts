@@ -24,6 +24,7 @@ export default defineConfig({
     ['list'],
     ['html', { outputFolder: 'playwright-report', open: 'never' }],
     ['json', { outputFile: 'test-results/results.json' }],
+    ['./reporters/custom-html-reporter.ts'],
   ],
   use: {
     baseURL: process.env.BASE_URL || 'https://devextension.synctag.com',
