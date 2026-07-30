@@ -106,7 +106,7 @@ test.describe('Checkout - declined payment scenarios', () => {
     await checkout.payWithNewCard(RAZORPAY_TEST_CARDS.failureDecline);
     await expect(checkout.paymentFailureIndicator()).toBeVisible({ timeout: 20_000 });
 
-    await page.goto('/profile?tab=plan');
+    await page.goto('/profile?tab=plan', { waitUntil: 'domcontentloaded' });
     await expect(page.getByText('Free')).toBeVisible(); // plan must remain unchanged
   });
 });

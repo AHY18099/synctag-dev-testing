@@ -41,11 +41,14 @@ export class AuthPage {
   }
 
   async gotoLogin() {
-    await this.page.goto('/auth');
+    // waitUntil: 'domcontentloaded' - this site's third-party trackers
+    // (ads/analytics pixels) can keep the network idle/load event from
+    // firing for a long time; the app itself is interactive well before that.
+    await this.page.goto('/auth', { waitUntil: 'domcontentloaded' });
   }
 
   async gotoSignup() {
-    await this.page.goto('/auth?tab=signup');
+    await this.page.goto('/auth?tab=signup', { waitUntil: 'domcontentloaded' });
   }
 
   async requestEmailOtp(email: string) {

@@ -9,7 +9,9 @@ export class PricingPage {
   }
 
   async goto() {
-    await this.page.goto('/pricing');
+    // domcontentloaded, not the default 'load': third-party tracker scripts
+    // on this site can keep the load event from firing for a long time.
+    await this.page.goto('/pricing', { waitUntil: 'domcontentloaded' });
   }
 
   /** Returns the pricing card container for a given plan name (e.g. "PRO - 7 DAYS"). */

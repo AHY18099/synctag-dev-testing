@@ -20,7 +20,9 @@ export class CheckoutPage {
   }
 
   async goto() {
-    await this.page.goto('/profile?tab=plan');
+    // domcontentloaded, not the default 'load': third-party tracker scripts
+    // on this site can keep the load event from firing for a long time.
+    await this.page.goto('/profile?tab=plan', { waitUntil: 'domcontentloaded' });
   }
 
   async openUpgradeModal() {
